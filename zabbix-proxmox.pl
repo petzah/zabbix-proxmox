@@ -1,67 +1,39 @@
 #!/usr/bin/perl
 
-# possible qemu items
-
-#   "balloon" : 1610612736,
-#   "cpu" : 0,
-#   "cpus" : 2,
-#   "disk" : 0,
-#   "diskread" : 96372390446,
-#   "diskwrite" : 345699340800,
-#   "freemem" : 137355264,
-#   "ha" : 0,
-#   "maxdisk" : 53691285504,
-#   "maxmem" : 1610612736,
-#   "mem" : 1442725888,
-#   "name" : "vpsnet",
-#   "netin" : 15358170080,
-#   "netout" : 17959040362,
-#   "pid" : "957545",
-#   "qmpstatus" : "running",
-#   "status" : "running",
-#   "template" : "",
-#   "uptime" : 774949
-
 use strict;
 use warnings;
-use Switch;
-use LWP::UserAgent;
-use HTTP::Request::Common;
-use Data::Dumper;
 use JSON;
+use Switch;
+use File::stat;
+use Data::Dumper;
 
-my $host = "localhost";
-my $port = "8006";
-my $username = 'zabbix@pve';
-my $password = "zabbix";
-
-my $url_base = "https://" . $host . ":" . $port;
-my $url_api = $url_base . "/api2/json";
-
-my $ticket = {};
+my $pveshcmd = "/usr/bin/sudo /usr/bin/pvesh get";
+my $tmpdir = "/tmp/zabbix-proxmox";
 my $node;
 
+# create tmp directory
+mkdir $tmpdir;
 
-my $ua = LWP::UserAgent->new(cookie_jar => {}, ssl_opts => { verify_hostname => 0 });
-$ua->agent('zabbix proxmox monitoring script');
-
-sub login {
-    my $res = $ua->post($url_api . "/access/ticket", { username => $username, password => $password } ) or die $!;
-    $ticket = decode_json($res->content)->{'data'};
-}
-
+# update cache files in tmp dir with current values
+# if file is older than 1min
 sub get_data {
     my ($proxmoxpath) = @_;
-    my $request = HTTP::Request->new();
-    $request->uri($url_api . $proxmoxpath);
-    $request->method("GET");
-    $request->header('Cookie' => 'PVEAuthCookie=' . $ticket->{ticket});
-    my $res = $ua->request($request);
-    my $data =  decode_json $res->content;
-    return $data->{'data'};
-}
+    my $filename = $proxmoxpath;
+    $filename =~ s/\//\./g;
+    my $file = "$tmpdir/$filename";
 
-login();
+    # wtf why $mtimestamp = (stat($file))[9]; is not working ???
+    my $filestat = stat($file);
+    my $mtimestamp = (defined(@$filestat[9]) ? @$filestat[9] : 0);
+    if((time - $mtimestamp) > 60) {
+        my $data = decode_json `$pveshcmd $proxmoxpath 2>/dev/null`;
+        open(FILE, ">$file") || die "Can not open: $!";
+        print FILE Data::Dumper->Dump([$data],["data"]);
+        close(FILE) || die "Error closing file: $!";
+        return $data;
+    }
+    return eval { do $file };
+}
 
 # get_local_node 
 my $data = get_data("/cluster/status");
