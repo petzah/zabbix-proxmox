@@ -33,7 +33,7 @@ use JSON;
 my $host = "localhost";
 my $port = "8006";
 my $username = 'zabbix@pve';
-my $password = "zabbix";
+my $password = 'zabbix';
 
 my $url_base = "https://" . $host . ":" . $port;
 my $url_api = $url_base . "/api2/json";
@@ -47,6 +47,7 @@ $ua->agent('zabbix proxmox monitoring script');
 
 sub login {
     my $res = $ua->post($url_api . "/access/ticket", { username => $username, password => $password } ) or die $!;
+    die $res->message if ($res->code ne 200);
     $ticket = decode_json($res->content)->{'data'};
 }
 
@@ -57,6 +58,7 @@ sub get_data {
     $request->method("GET");
     $request->header('Cookie' => 'PVEAuthCookie=' . $ticket->{ticket});
     my $res = $ua->request($request);
+    die res->message if (!$res->is_success);
     my $data =  decode_json $res->content;
     return $data->{'data'};
 }
