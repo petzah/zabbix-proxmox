@@ -101,7 +101,7 @@ sub qemu_discovery {
 sub qemu_item {
     my ($vmid, $item) = @_;
     my $data = get_data("/nodes/$node/qemu/$vmid/status/current");
-    print $data->{$item};
+    print $data->{$item} if defined $data->{$item};
 }
 
 switch ($ARGV[0]) {
