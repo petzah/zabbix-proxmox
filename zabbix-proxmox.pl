@@ -29,6 +29,7 @@ use LWP::UserAgent;
 use HTTP::Request::Common;
 use Data::Dumper;
 use JSON;
+use Net::Netmask;
 
 my $host = "localhost";
 my $port = "8006";
@@ -88,11 +89,32 @@ sub node_status_item {
 
 sub qemu_discovery {
     my @out;
+    my %arptable = ();
     my $data = get_data("/nodes/$node/qemu");
+
+    # dirty way..1)get all intf ip addresses 2)find ranges 3)ping IPs 4)check ARP table
+    my @iptoscan = `ip addr |awk '/inet / && !/lo\$/ {print \$2}'`;
+    chomp @iptoscan;
+    foreach(@iptoscan) {
+        my $block = Net::Netmask->new($_);
+	system("/usr/bin/fping -b 25 -c 1 -q -r 1 -H 1 -g $_ > /dev/null 2>&1");
+    }
+    my @arplist = sort(`/usr/sbin/arp -an |awk -F"[() ]+" '!/incomplete/ {print \$2,\$4,\$7}'`);
+    chomp @arplist;
+    foreach(@arplist) {
+        my ($ip, $mac, $interface) = split;
+	$arptable{$mac}{'mac'} = $mac;
+	$arptable{$mac}{'ip'} = $ip;
+	$arptable{$mac}{'interface'} = $interface;
+    }
+
     foreach(@$data) {
+        my $net0mac = qemu_config_item($_->{'vmid'}, 'net0mac');
         push(@out, {
 		'{#PMXQEMUVMID}'=>$_->{'vmid'},
-		'{#PMXQEMUNAME}'=>$_->{'name'}
+		'{#PMXQEMUNAME}'=>$_->{'name'},
+                '{#PMXQEMUMAC0}'=>$net0mac,
+                '{#PMXQEMUIP0}'=>$arptable{$net0mac}{'ip'}, # find ip from arp with mac
 	});
     }
     print encode_json({'data'=>\@out});
@@ -104,10 +126,21 @@ sub qemu_item {
     print $data->{$item} if defined $data->{$item};
 }
 
+sub qemu_config_item {
+    my ($vmid, $item) = @_;
+    my $data = get_data("/nodes/$node/qemu/$vmid/config");
+    # add our own items
+    $data->{'net0mac'} =  lc((split('=',(split(',', $data->{'net0'}))[0]))[1]);
+    $data->{'net0driver'} =  lc((split('=',(split(',', $data->{'net0'}))[0]))[0]);
+    $data->{'net0bridge'} =  lc((split('=',(split(',', $data->{'net0'}))[1]))[1]);
+    return $data->{$item} if defined $data->{$item};
+}
+
 switch ($ARGV[0]) {
     case "nodes_discovery" { nodes_discovery(); }
     case "node_pveversion" { node_status_item('pveversion'); }
     case "qemu_discovery" { qemu_discovery(); }
     case "qemu_item" { qemu_item($ARGV[1], $ARGV[2]); }
+    case "qemu_config_item" { print qemu_config_item($ARGV[1], $ARGV[2]); }
 }
-
+ 
