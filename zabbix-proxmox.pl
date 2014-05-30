@@ -97,7 +97,7 @@ sub qemu_discovery {
     chomp @iptoscan;
     foreach(@iptoscan) {
         my $block = Net::Netmask->new($_);
-	system("/usr/bin/fping -b 25 -c 1 -q -r 1 -H 1 -g $_ > /dev/null 2>&1");
+	system("/usr/bin/fping -b 25 -c 1 -i 1 -q -r 0 -t 1 -H 1 -g $_ > /dev/null 2>&1");
     }
     my @arplist = sort(`/usr/sbin/arp -an |awk -F"[() ]+" '!/incomplete/ {print \$2,\$4,\$7}'`);
     chomp @arplist;
