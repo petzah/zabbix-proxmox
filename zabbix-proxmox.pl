@@ -78,13 +78,13 @@ sub nodes_discovery {
     foreach(@$data) {
         push(@out,{'{#PMXNODE}'=>$_->{'node'}});
     }
-    print encode_json({'data'=>\@out});
+    return encode_json({'data'=>\@out});
 }
 
 sub node_status_item {
     my ($item) = @_;
     my $data = get_data("/nodes/$node/status");
-    print $data->{$item};
+    return $data->{$item};
 }
 
 sub qemu_discovery {
@@ -102,10 +102,10 @@ sub qemu_discovery {
     my @arplist = sort(`/usr/sbin/arp -an |awk -F"[() ]+" '!/incomplete/ {print \$2,\$4,\$7}'`);
     chomp @arplist;
     foreach(@arplist) {
-        my ($ip, $mac, $interface) = split;
-	$arptable{$mac}{'mac'} = $mac;
-	$arptable{$mac}{'ip'} = $ip;
-	$arptable{$mac}{'interface'} = $interface;
+    my ($ip, $mac, $interface) = split;
+        $arptable{$mac}{'mac'} = $mac;
+        $arptable{$mac}{'ip'} = $ip;
+        $arptable{$mac}{'interface'} = $interface;
     }
 
     foreach(@$data) {
@@ -117,13 +117,13 @@ sub qemu_discovery {
                 '{#PMXQEMUIP0}'=>$arptable{$net0mac}{'ip'}, # find ip from arp with mac
 	});
     }
-    print encode_json({'data'=>\@out});
+    return encode_json({'data'=>\@out});
 }
 
 sub qemu_item {
     my ($vmid, $item) = @_;
     my $data = get_data("/nodes/$node/qemu/$vmid/status/current");
-    print $data->{$item} if defined $data->{$item};
+    return $data->{$item} if defined $data->{$item};
 }
 
 sub qemu_config_item {
@@ -137,10 +137,10 @@ sub qemu_config_item {
 }
 
 switch ($ARGV[0]) {
-    case "nodes_discovery" { nodes_discovery(); }
-    case "node_pveversion" { node_status_item('pveversion'); }
-    case "qemu_discovery" { qemu_discovery(); }
-    case "qemu_item" { qemu_item($ARGV[1], $ARGV[2]); }
+    case "nodes_discovery" { print nodes_discovery(); }
+    case "node_pveversion" { print node_status_item('pveversion'); }
+    case "qemu_discovery" { print qemu_discovery(); }
+    case "qemu_item" { print qemu_item($ARGV[1], $ARGV[2]); }
     case "qemu_config_item" { print qemu_config_item($ARGV[1], $ARGV[2]); }
 }
  
