@@ -1,5 +1,10 @@
 #!/usr/bin/perl
 
+# required packages:
+#   arpwatch (for ip discovery from /var/lib/arpwatch/arp.dat)
+# required permisisons:
+#   zabbix user must be added to arpwatch group
+
 # possible qemu items
 
 #   "balloon" : 1610612736,
@@ -29,12 +34,13 @@ use LWP::UserAgent;
 use HTTP::Request::Common;
 use Data::Dumper;
 use JSON;
-use Net::Netmask;
 
 my $host = "localhost";
 my $port = "8006";
 my $username = 'zabbix@pve';
 my $password = 'zabbix';
+
+my $arpwatchfile = '/var/lib/arpwatch/arp.dat';
 
 my $url_base = "https://" . $host . ":" . $port;
 my $url_api = $url_base . "/api2/json";
@@ -92,21 +98,14 @@ sub qemu_discovery {
     my %arptable = ();
     my $data = get_data("/nodes/$node/qemu");
 
-    # dirty way..1)get all intf ip addresses 2)find ranges 3)ping IPs 4)check ARP table
-    my @iptoscan = `ip addr |awk '/inet / && !/lo\$/ {print \$2}'`;
-    chomp @iptoscan;
-    foreach(@iptoscan) {
-        my $block = Net::Netmask->new($_);
-	system("/usr/bin/fping -b 25 -c 1 -i 1 -q -r 0 -t 1 -H 1 -g $_ > /dev/null 2>&1");
-    }
-    my @arplist = sort(`/usr/sbin/arp -an |awk -F"[() ]+" '!/incomplete/ {print \$2,\$4,\$7}'`);
-    chomp @arplist;
-    foreach(@arplist) {
-    my ($ip, $mac, $interface) = split;
+    open(ARPDAT, $arpwatchfile) or die "failed to open $!";
+    while(<ARPDAT>) {
+    my ($mac, $ip, $time, $interface) = split;
         $arptable{$mac}{'mac'} = $mac;
         $arptable{$mac}{'ip'} = $ip;
         $arptable{$mac}{'interface'} = $interface;
     }
+    close ARPDAT;
 
     foreach(@$data) {
         my $net0mac = qemu_config_item($_->{'vmid'}, 'net0mac');
