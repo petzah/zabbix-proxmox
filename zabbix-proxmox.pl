@@ -98,14 +98,19 @@ sub qemu_discovery {
     my %arptable = ();
     my $data = get_data("/nodes/$node/qemu");
 
+    my @lines;
     open(ARPDAT, $arpwatchfile) or die "failed to open $!";
     while(<ARPDAT>) {
-    my ($mac, $ip, $time, $interface) = split;
+        push(@lines,[split /\t/]);
+    }
+    close ARPDAT;
+    my @sorted = sort { $a->[2] <=> $b->[2] } @lines;
+    foreach my $l (@sorted) {
+	my ($mac, $ip, $time, $interface) = @$l;
         $arptable{$mac}{'mac'} = $mac;
         $arptable{$mac}{'ip'} = $ip;
         $arptable{$mac}{'interface'} = $interface;
     }
-    close ARPDAT;
 
     foreach(@$data) {
         my $net0mac = qemu_config_item($_->{'vmid'}, 'net0mac');
