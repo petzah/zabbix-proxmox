@@ -41,21 +41,37 @@ my $username = 'zabbix@pve';
 my $password = 'zabbix';
 
 my $arpwatchfile = '/var/lib/arpwatch/arp.dat';
+my $ticketfile = '/tmp/.zabbix-proxmox';
 
 my $url_base = "https://" . $host . ":" . $port;
 my $url_api = $url_base . "/api2/json";
 
-my $ticket = {};
+#my $ticket = {};
 my $node;
 
 
 my $ua = LWP::UserAgent->new(cookie_jar => {}, ssl_opts => { verify_hostname => 0 });
 $ua->agent('zabbix proxmox monitoring script');
 
+# first run
+login() if ! -e $ticketfile;
+
 sub login {
     my $res = $ua->post($url_api . "/access/ticket", { username => $username, password => $password } ) or die $!;
     die $res->message if ($res->code ne 200);
-    $ticket = decode_json($res->content)->{'data'};
+    my $data = decode_json($res->content)->{'data'};
+    open(FILE, ">$ticketfile") || die "Can not open: $!";
+    print FILE $data->{ticket};
+    close(FILE) || die "Error closing file: $!";
+    chmod 0600, $ticketfile;
+}
+
+sub get_ticket {
+    my $ticket;
+    open(my $fh, '<', $ticketfile) or die "Can not open: $!";
+    { local $/; $ticket = <$fh>; }
+    close($fh);
+    return $ticket;
 }
 
 sub get_data {
@@ -63,14 +79,18 @@ sub get_data {
     my $request = HTTP::Request->new();
     $request->uri($url_api . $proxmoxpath);
     $request->method("GET");
-    $request->header('Cookie' => 'PVEAuthCookie=' . $ticket->{ticket});
+    $request->header('Cookie' => 'PVEAuthCookie=' . get_ticket());
     my $res = $ua->request($request);
-    die res->message if (!$res->is_success);
+    # refresh ticket
+    if ($res->code eq 401) {
+        login();
+        $request->header('Cookie' => 'PVEAuthCookie=' . get_ticket());
+        $res = $ua->request($request);
+    }
+    die $res->message if (!$res->is_success);
     my $data =  decode_json $res->content;
     return $data->{'data'};
 }
-
-login();
 
 # get_local_node 
 my $data = get_data("/cluster/status");
