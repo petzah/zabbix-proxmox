@@ -46,9 +46,7 @@ my $ticketfile = '/tmp/.zabbix-proxmox';
 my $url_base = "https://" . $host . ":" . $port;
 my $url_api = $url_base . "/api2/json";
 
-#my $ticket = {};
 my $node;
-
 
 my $ua = LWP::UserAgent->new(cookie_jar => {}, ssl_opts => { verify_hostname => 0 });
 $ua->agent('zabbix proxmox monitoring script');
